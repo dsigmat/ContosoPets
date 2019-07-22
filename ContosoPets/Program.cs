@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ContosoPets.Models;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -17,35 +18,27 @@ namespace ContosoPets
         public static void Main(string[] args)
         {
             var host = CreateWebHostBuilder(args).Build();
-            SeedDatabase(host);
+            using (var scope = host.Services.CreateScope())
+            {
+                var services = scope.ServiceProvider;
+
+                try
+                {
+                    var context = services.GetRequiredService<ContosoPetsContext>();
+                    context.Database.Migrate();
+                    SeedData.Initialize(services);
+                }
+                catch (Exception ex)
+                {
+                    var logger = services.GetRequiredService<ILogger<Program>>();
+                    logger.LogError(ex, "An error occurred seeding the DB.");
+                }
+            }
             host.Run();
         }
 
         public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
             WebHost.CreateDefaultBuilder(args)
                 .UseStartup<Startup>();
-
-        private static void SeedDatabase(IWebHost host)
-        {
-            var scopeFactory = host.Services.GetRequiredService<IServiceScopeFactory>();
-
-            using (var scope = scopeFactory.CreateScope())
-            {
-                var context = scope.ServiceProvider.GetRequiredService<ContosoPetsContext>();
-
-                if (context.Database.EnsureCreated())
-                {
-                    try
-                    {
-                        SeedData.Initialize(context);
-                    }
-                    catch (Exception ex)
-                    {
-                        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-                        logger.LogError(ex, "A database seeding error occurred.");
-                    }
-                }
-            }
-        }
     }
 }
